@@ -95,6 +95,7 @@ npm run dev
 | `!ping` | `!ping` | Checks bot latency and connectivity. |
 | `!echo` | `!echo <text>` | Repeats the provided text. |
 | `!sticker`| `!sticker` | Send or reply to an image with `!sticker` to turn it into a sticker. |
+| `!stats` | `!stats` | View real-time system metrics, bot uptime, RAM usage, and runtime info. |
 | `!ai` | `!ai <prompt>` | Ask an AI question powered by Google Gemini. |
 
 ---
