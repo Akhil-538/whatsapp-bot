@@ -1,6 +1,6 @@
 # 🤖 WhatsApp Bot
 
-A modern, modular WhatsApp Bot built with Node.js and [`whatsapp-web.js`](https://github.com/pedroslopez/whatsapp-web.js), featuring session persistence, automatic command routing, sticker generation, and Google Gemini AI responses.
+A modern , modular WhatsApp Bot built with Node.js and [`whatsapp-web.js`](https://github.com/pedroslopez/whatsapp-web.js), featuring session persistence, automatic command routing, sticker generation, and Google Gemini AI responses.
 
 ---
 
