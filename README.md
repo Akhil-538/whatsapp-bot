@@ -9,7 +9,9 @@ A modern , modular WhatsApp Bot built with Node.js and [`whatsapp-web.js`](https
 - 📱 **QR Code Authentication**: Connect quickly by scanning a QR code with your phone.
 - 💾 **Session Persistence**: Sessions are saved locally (`.wwebjs_auth`), so you only scan the QR code once.
 - ⚡ **Modular Command System**: Easily create new commands by dropping `.js` files into `src/commands/`.
-- 🧠 **AI Integration (Gemini)**: Ask questions and get answers directly in your chats using Google Gemini.
+- 🧠 **Multimodal AI Assistant (Gemini)**: Text Q&A, photo analysis (vision), audio transcription, and conversation history buffer.
+- 🔗 **Webpage & Link Summarizer**: Extract article/webpage content and generate executive bullet-point summaries.
+- 🎙️ **Voice Note Transcriber**: Turn spoken voice notes into clean text transcripts with auto-translation.
 - 🖼️ **Sticker Maker**: Automatically convert photos or quoted images into WhatsApp stickers with `!sticker`.
 - 📊 **Dynamic Help Menu**: The `!help` menu updates automatically whenever you add new commands.
 
@@ -29,8 +31,13 @@ whatsapp-bot/
 │   │   ├── help.js            # Dynamic command list
 │   │   ├── echo.js            # Echo input text
 │   │   ├── sticker.js         # Media to sticker converter
-│   │   └── ai.js              # Google Gemini AI assistant
+│   │   ├── stats.js           # Bot and host performance metrics
+│   │   ├── joke.js            # Random jokes with offline fallbacks
+│   │   ├── ai.js              # Multimodal Gemini assistant with vision & memory
+│   │   ├── summarize.js       # Webpage & text summarizer
+│   │   └── transcribe.js      # Voice note & audio transcriber
 │   └── utils/
+│       ├── gemini.js          # Google Gemini REST API caller & MIME cleaner
 │       └── logger.js          # Console logger with timestamps
 ├── .env.example               # Environment variables template
 ├── .env                       # Active environment configuration
@@ -97,7 +104,9 @@ npm run dev
 | `!sticker`| `!sticker` | Send or reply to an image with `!sticker` to turn it into a sticker. |
 | `!stats` | `!stats` | View real-time system metrics, bot uptime, RAM usage, and runtime info. |
 | `!joke` | `!joke` | Get a random funny programming or dad joke. |
-| `!ai` | `!ai <prompt>` | Ask an AI question powered by Google Gemini. |
+| `!ai` | `!ai <prompt>` / `!ai reset` | Ask Gemini a question, reply to photos for visual inspection, or reset context. |
+| `!summarize` | `!summarize <url>` | Summarize a webpage link or quoted message into concise bullet points. |
+| `!transcribe`| `!transcribe` | Reply to a voice note or audio file to transcribe it into clean text. |
 
 ---
 
