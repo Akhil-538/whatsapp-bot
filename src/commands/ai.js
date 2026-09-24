@@ -1,66 +1,148 @@
-import { config } from "../config.js";
+import { callGemini, cleanMimeType } from "../utils/gemini.js";
+
+// Rolling buffer of recent chat history per chat (max 6 messages: 3 user + 3 model)
+const MAX_HISTORY_MESSAGES = 6;
+const chatHistories = new Map();
+
+/**
+ * Resets the conversation history for a given chat ID
+ */
+export function resetChatHistory(chatId) {
+  chatHistories.delete(chatId);
+}
 
 export default {
   name: "ai",
-  description: "Ask an AI question powered by Google Gemini",
-  usage: "ai <your question or prompt>",
+  description: "Ask Google Gemini with text, images, voice notes, and conversation memory",
+  usage: "ai <prompt> | !ai reset | Reply to an image/audio with !ai [prompt]",
   async execute(client, message, args) {
-    if (!config.enableAi) {
-      await message.reply("⚠️ AI features are currently disabled in configuration.");
+    const chatId = message.from;
+    const subCommand = args[0]?.toLowerCase();
+
+    // Command: !ai reset or !ai clear
+    if (subCommand === "reset" || subCommand === "clear") {
+      resetChatHistory(chatId);
+      await message.reply("🧹 *AI conversation memory cleared!* Starting a fresh context.");
       return;
     }
 
-    if (!config.geminiApiKey) {
+    // Check if the current message or quoted message has media
+    let targetMessage = message;
+    if (!message.hasMedia && message.hasQuotedMsg) {
+      targetMessage = await message.getQuotedMessage();
+    }
+
+    let promptText = args.join(" ").trim();
+    let mediaPart = null;
+    let mediaTypeDesc = null;
+
+    if (targetMessage.hasMedia) {
+      try {
+        const media = await targetMessage.downloadMedia();
+        if (media && media.mimetype && media.data) {
+          const mime = cleanMimeType(media.mimetype);
+
+          if (mime.startsWith("image/")) {
+            mediaPart = {
+              inlineData: {
+                mimeType: mime,
+                data: media.data,
+              },
+            };
+            mediaTypeDesc = "image";
+            if (!promptText) {
+              promptText = "Describe this image in detail and tell me what you see.";
+            }
+          } else if (mime.startsWith("audio/") || mime.includes("ogg")) {
+            mediaPart = {
+              inlineData: {
+                mimeType: mime,
+                data: media.data,
+              },
+            };
+            mediaTypeDesc = "audio";
+            if (!promptText) {
+              promptText = "Please transcribe and explain this audio recording.";
+            }
+          }
+        }
+      } catch (mediaErr) {
+        console.error("Error downloading media for AI command:", mediaErr);
+      }
+    }
+
+    // If no prompt text and no media attached
+    if (!promptText && !mediaPart) {
       await message.reply(
-        "⚠️ Gemini API key is not configured. Please add `GEMINI_API_KEY=your_key` in the `.env` file.\nGet a free key at: https://aistudio.google.com/"
+        "⚠️ Please provide a prompt or reply to an image/audio.\n\n" +
+        "• *Text:* `!ai What is quantum computing?`\n" +
+        "• *Image:* Reply `!ai Describe this` to any photo\n" +
+        "• *Voice/Audio:* Reply `!ai` to any voice note\n" +
+        "• *Reset:* `!ai reset` to clear conversation memory"
       );
       return;
     }
 
-    if (!args.length) {
-      await message.reply("⚠️ Please provide a prompt. Example: `!ai What is quantum computing?`");
-      return;
+    // Build the current turn parts
+    const currentParts = [];
+    if (mediaPart) {
+      currentParts.push(mediaPart);
+    }
+    if (promptText) {
+      currentParts.push({ text: promptText });
     }
 
-    const prompt = args.join(" ");
+    // Get chat history
+    const history = chatHistories.get(chatId) || [];
+
+    // Payload contents: previous turns + current turn
+    const contents = [
+      ...history,
+      {
+        role: "user",
+        parts: currentParts,
+      },
+    ];
 
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.geminiApiKey}`;
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-        }),
+      const answer = await callGemini({
+        contents,
+        systemInstruction:
+          "You are a helpful, intelligent WhatsApp AI assistant powered by Google Gemini. " +
+          "Provide concise, informative, and well-structured answers using clean markdown. " +
+          "Keep responses readable on mobile screens.",
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const errorMsg = errData.error?.message || response.statusText;
-        await message.reply(`❌ Gemini API Error: ${errorMsg}`);
-        return;
+      // Update rolling conversation history
+      // Store lightweight text representation for media turns to prevent memory bloat
+      const historyPrompt = mediaTypeDesc
+        ? `[User attached ${mediaTypeDesc}]: ${promptText}`
+        : promptText;
+
+      const updatedHistory = [
+        ...history,
+        { role: "user", parts: [{ text: historyPrompt }] },
+        { role: "model", parts: [{ text: answer }] },
+      ];
+
+      // Keep only the most recent N messages
+      if (updatedHistory.length > MAX_HISTORY_MESSAGES) {
+        chatHistories.set(chatId, updatedHistory.slice(-MAX_HISTORY_MESSAGES));
+      } else {
+        chatHistories.set(chatId, updatedHistory);
       }
 
-      const data = await response.json();
-      const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      // WhatsApp message length limit guard
+      const trimmedAnswer =
+        answer.length > 3500
+          ? answer.slice(0, 3500) + "...\n\n_(Response truncated due to length)_"
+          : answer;
 
-      if (!answer) {
-        await message.reply("⚠️ No response received from AI model.");
-        return;
-      }
-
-      // WhatsApp messages have length limits; trim if necessary
-      const trimmedAnswer = answer.length > 3500 ? answer.slice(0, 3500) + "...\n\n_(Response truncated)_" : answer;
-
-      await message.reply(`🤖 *AI Assistant:*\n\n${trimmedAnswer}`);
+      const header = mediaTypeDesc ? `🤖 *AI Analysis (${mediaTypeDesc}):*\n\n` : "🤖 *AI Assistant:*\n\n";
+      await message.reply(`${header}${trimmedAnswer}`);
     } catch (err) {
       console.error("AI command error:", err);
-      await message.reply("❌ An unexpected error occurred while processing your AI request.");
+      await message.reply(`❌ ${err.message || "An unexpected error occurred while processing your request."}`);
     }
   },
 };
