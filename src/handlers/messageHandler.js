@@ -37,6 +37,8 @@ export class MessageHandler {
 
   async handleMessage(client, message) {
     // Ignore status broadcasts and empty body
+    if (!message.body || message.isStatus) return;
+
     const body = message.body.trim();
 
     // If message does not start with command prefix, check for natural language auto-replies (e.g. "hello")
@@ -48,7 +50,10 @@ export class MessageHandler {
     const args = body.slice(config.prefix.length).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();
 
-    if (!commandName) return;
+    if (!commandName) {
+      await message.reply(`🤖 Type *${config.prefix}help* to see all available commands!`);
+      return;
+    }
 
     const command = this.commands.get(commandName);
     if (!command) {
@@ -68,9 +73,13 @@ export class MessageHandler {
   }
 
   async handleConversationalReplies(client, message, body) {
-    // Avoid auto-replying to messages sent by ourselves to others
-    const isSelfChat = message.from === message.to || (client.info?.wid && message.from.includes(client.info.wid.user));
-    if (message.fromMe && !isSelfChat) {
+    // Prevent the bot from replying to its own automated responses (avoid infinite loops)
+    if (
+      body.startsWith("Hi!\nHow are you?") ||
+      body.startsWith("I'm doing great") ||
+      body.startsWith("Glad to hear that") ||
+      body.startsWith("🤖 Type")
+    ) {
       return;
     }
 
